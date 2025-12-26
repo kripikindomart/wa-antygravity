@@ -104,10 +104,16 @@ class WebhookController extends Controller
         }
 
         // Extract phone number from JID
-        $fromNumber = preg_replace('/@.*/', '', $data['from'] ?? '');
+        // Prioritize remoteJidAlt (e.g. from LID mapping log) if available, otherwise clean 'from'
+        // NOTE: Standard Baileys webhook might not send remoteJidAlt unless we customized it.
+        // Assuming we rely on 'from'. If it contains '@lid', it might be an issue.
+        // We try to strip everything after @.
+        $rawFrom = $data['from'] ?? '';
+        $fromNumber = preg_replace('/@.*/', '', $rawFrom);
+
         $messageContent = $data['message'] ?? '';
 
-        Log::info("Message from {$fromNumber} on device {$device->name}: {$messageContent}");
+        Log::info("Message from {$fromNumber} ({$rawFrom}) on device {$device->name}: {$messageContent}");
 
         // Save to inbox
         $inbox = Inbox::create([
@@ -128,12 +134,85 @@ class WebhookController extends Controller
         // Check for auto-replies
         $this->processAutoReply($device, $fromNumber, $messageContent);
 
+        // Save as Daily Lead
+        $this->saveLead($device, $fromNumber, $data['fromName'] ?? null, $messageContent);
+
         return response()->json(['status' => 'ok', 'inbox_id' => $inbox->id]);
     }
 
-    // ... mapMessageType ...
+    /**
+     * Save or update Daily Lead
+     */
+    protected function saveLead(Device $device, string $fromNumber, ?string $fromName, string $message)
+    {
+        try {
+            // Daily Lead: One entry per number per day
+            $today = now()->startOfDay();
 
-    // ... forwardToWebhook ...
+            $lead = \App\Models\Lead::where('user_id', $device->user_id)
+                ->where('number', $fromNumber)
+                ->where('created_at', '>=', $today)
+                ->first();
+
+            if ($lead) {
+                $lead->update([
+                    'last_message' => $message,
+                    'last_activity_at' => now(),
+                ]);
+            } else {
+                \App\Models\Lead::create([
+                    'user_id' => $device->user_id,
+                    'device_id' => $device->id,
+                    'number' => $fromNumber,
+                    'name' => $fromName,
+                    'source' => 'incoming',
+                    'status' => 'new',
+                    'last_message' => $message,
+                    'last_activity_at' => now(),
+                ]);
+                Log::info("New Daily Lead created: {$fromNumber}");
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to save lead: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Map Baileys message type to our enum
+     */
+    protected function mapMessageType(string $type): string
+    {
+        return match ($type) {
+            'conversation', 'extendedTextMessage' => 'text',
+            'imageMessage' => 'image',
+            'documentMessage' => 'document',
+            'videoMessage' => 'video',
+            'audioMessage' => 'audio',
+            'stickerMessage' => 'sticker',
+            'locationMessage' => 'location',
+            default => 'text',
+        };
+    }
+
+    /**
+     * Forward message to user's webhook
+     */
+    protected function forwardToWebhook(string $webhookUrl, array $data, Inbox $inbox)
+    {
+        try {
+            Http::timeout(10)->post($webhookUrl, [
+                'event' => 'message.received',
+                'inbox_id' => $inbox->id,
+                'from' => $inbox->from_number,
+                'from_name' => $inbox->from_name,
+                'message' => $inbox->message,
+                'type' => $inbox->type,
+                'received_at' => $inbox->received_at->toISOString(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Webhook forward failed: {$e->getMessage()}");
+        }
+    }
 
     /**
      * Process auto-reply rules
@@ -181,6 +260,9 @@ class WebhookController extends Controller
         try {
             $nodeServiceUrl = config('services.whatsapp.url', 'http://127.0.0.1:3001');
 
+            // Ensure 'to' is a proper JID suffix if missing (Node service handles it usually, but let's be safe if it's pure number)
+            // But Node service expects 'to' as number or JID.
+
             $response = Http::timeout(30)->post("{$nodeServiceUrl}/messages/send", [
                 'sessionId' => $device->token,
                 'to' => $to,
@@ -188,9 +270,11 @@ class WebhookController extends Controller
             ]);
 
             if ($response->successful()) {
-                Log::info("Auto-reply sent successfully to {$to}");
-                // Increment hit count (assumes column exists, or we log it)
-                // TODO: Add column hit_count to auto_replies table
+                Log::info("Auto-reply sent successfully to {$to} using rule: {$rule->name}");
+
+                // Increment hit count
+                $rule->increment('hit_count');
+
             } else {
                 Log::error("Failed to send auto-reply to {$to}. Status: " . $response->status() . " Body: " . $response->body());
             }

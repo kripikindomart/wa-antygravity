@@ -124,25 +124,39 @@ async function createSession(sessionId) {
 
     // Handle incoming messages
     socket.ev.on('messages.upsert', async ({ messages, type }) => {
+        console.log(`[DEBUG] Received ${messages.length} messages. Type: ${type}`);
+        
         if (type !== 'notify') return;
 
         for (const msg of messages) {
-            if (msg.key.fromMe || isJidBroadcast(msg.key.remoteJid)) continue;
+            console.log('[DEBUG] Processing message:', JSON.stringify(msg.key));
+            
+            if (msg.key.fromMe || isJidBroadcast(msg.key.remoteJid)) {
+                console.log('[DEBUG] Skipped: fromMe or Broadcast');
+                continue;
+            }
 
             const messageContent = msg.message?.conversation || 
                                    msg.message?.extendedTextMessage?.text ||
                                    msg.message?.imageMessage?.caption ||
                                    '';
+            
+            // Prioritize remoteJidAlt (e.g. phone number) over remoteJid (which might be LID)
+            const fromJid = msg.key.remoteJidAlt || msg.key.remoteJid;
+            
+            console.log(`[DEBUG] Content: ${messageContent} From: ${fromJid} (Original: ${msg.key.remoteJid})`);
 
             await sendWebhook('message.received', {
                 sessionId,
-                from: msg.key.remoteJid,
+                from: fromJid,
                 fromName: msg.pushName,
                 message: messageContent,
                 type: Object.keys(msg.message || {})[0] || 'unknown',
                 messageId: msg.key.id,
                 timestamp: msg.messageTimestamp,
             });
+            
+            console.log('[DEBUG] Webhook sent.');
         }
     });
 

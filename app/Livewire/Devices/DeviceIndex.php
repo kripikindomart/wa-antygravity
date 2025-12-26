@@ -17,14 +17,26 @@ class DeviceIndex extends Component
     public bool $showAddModal = false;
     public bool $showQrModal = false;
     public ?string $qrCode = null;
+
+    // Form properties
     public string $deviceName = '';
+    public string $webhookUrl = '';
+
+    // State
+    public bool $isEditing = false;
+    public ?int $editingDeviceId = null;
+
     public ?int $activeDeviceId = null;
     public ?string $activeDeviceToken = null;
     public string $deviceStatus = 'init';
 
-    protected $rules = [
-        'deviceName' => 'required|min:3|max:50',
-    ];
+    protected function rules()
+    {
+        return [
+            'deviceName' => 'required|min:3|max:50',
+            'webhookUrl' => 'nullable|url|max:255',
+        ];
+    }
 
     #[Computed]
     public function devices()
@@ -34,23 +46,41 @@ class DeviceIndex extends Component
 
     public function openAddModal()
     {
+        $this->resetForm();
         $this->showAddModal = true;
-        $this->deviceName = '';
-        $this->resetValidation();
     }
 
     public function closeAddModal()
     {
         $this->showAddModal = false;
+        $this->resetForm();
+    }
+
+    public function resetForm()
+    {
         $this->deviceName = '';
+        $this->webhookUrl = '';
+        $this->isEditing = false;
+        $this->editingDeviceId = null;
+        $this->resetValidation();
+    }
+
+    public function save()
+    {
+        $this->validate();
+
+        if ($this->isEditing) {
+            $this->updateDevice();
+        } else {
+            $this->createDevice();
+        }
     }
 
     public function createDevice()
     {
-        $this->validate();
-
         $device = Auth::user()->devices()->create([
             'name' => $this->deviceName,
+            'webhook_url' => $this->webhookUrl ?: null,
             'status' => 'init',
         ]);
 
@@ -62,6 +92,35 @@ class DeviceIndex extends Component
         $this->dispatch('notify', [
             'type' => 'success',
             'message' => 'Device created! Scan QR code to connect.',
+        ]);
+    }
+
+    public function editDevice($deviceId)
+    {
+        $device = Auth::user()->devices()->findOrFail($deviceId);
+
+        $this->editingDeviceId = $device->id;
+        $this->deviceName = $device->name;
+        $this->webhookUrl = $device->webhook_url ?? '';
+        $this->isEditing = true;
+
+        $this->showAddModal = true;
+    }
+
+    public function updateDevice()
+    {
+        $device = Auth::user()->devices()->findOrFail($this->editingDeviceId);
+
+        $device->update([
+            'name' => $this->deviceName,
+            'webhook_url' => $this->webhookUrl ?: null,
+        ]);
+
+        $this->closeAddModal();
+
+        $this->dispatch('notify', [
+            'type' => 'success',
+            'message' => 'Device updated successfully.',
         ]);
     }
 

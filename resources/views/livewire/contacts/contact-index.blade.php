@@ -88,7 +88,8 @@
                                 @endif
                             </td>
                             <td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm">
-                                {{ $contact->created_at->format('M d, Y') }}</td>
+                                {{ $contact->created_at->format('M d, Y') }}
+                            </td>
                             <td class="px-6 py-4 text-right">
                                 <div class="flex items-center justify-end gap-2">
                                     <button wire:click="edit({{ $contact->id }})"
@@ -144,7 +145,8 @@
     @if($showModal)
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" wire:click="closeModal"></div>
-            <div class="relative w-full max-w-md glass-card rounded-2xl p-6 animate-fade-in-up">
+            <div
+                class="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-700 animate-fade-in-up">
                 <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-4">
                     {{ $isEditing ? 'Edit Contact' : 'Add New Contact' }}
                 </h3>

@@ -21,7 +21,7 @@ use App\Http\Controllers\Api\MessageController;
 Route::post('/webhook/whatsapp', [WebhookController::class, 'handle']);
 
 // Authenticated API Routes (requires Sanctum token)
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth:sanctum')->name('api.')->group(function () {
 
     /**
      * @group Authentication
@@ -41,8 +41,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('contacts', ContactController::class);
 
     // Message Management
-    Route::get('/messages', [MessageController::class, 'index']);
-    Route::post('/messages/send', [MessageController::class, 'store']);
-    Route::post('/messages/send-bulk', [MessageController::class, 'sendBulk']);
-    Route::get('/messages/{id}', [MessageController::class, 'show']);
+    Route::get('/messages', [MessageController::class, 'index'])->name('messages.index');
+    Route::post('/messages/send', [MessageController::class, 'store'])->name('messages.store');
+    Route::post('/messages/send-bulk', [MessageController::class, 'sendBulk'])->name('messages.send-bulk');
+    Route::get('/messages/{id}', [MessageController::class, 'show'])->name('messages.show');
 });

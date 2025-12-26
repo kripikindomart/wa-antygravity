@@ -46,6 +46,8 @@
                                     class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400">Inactive</span>
                             @endif
                             <span class="text-xs text-slate-400">Priority: {{ $rule->priority }}</span>
+                            <span class="text-xs text-slate-400">Hits: <span
+                                    class="font-medium text-slate-600 dark:text-slate-300">{{ number_format($rule->hit_count) }}</span></span>
                         </div>
 
                         <div class="flex flex-wrap gap-2 mb-3">
@@ -130,7 +132,7 @@
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" wire:click="closeModal"></div>
             <div
-                class="relative w-full max-w-lg glass-card rounded-2xl p-6 animate-fade-in-up max-h-[90vh] overflow-y-auto">
+                class="relative w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-700 animate-fade-in-up max-h-[90vh] overflow-y-auto">
                 <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-4">
                     {{ $isEditing ? 'Edit Rule' : 'Add Auto-Reply Rule' }}
                 </h3>

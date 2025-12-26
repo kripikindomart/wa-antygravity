@@ -103,6 +103,16 @@
                             Connect
                         </button>
                     @endif
+
+                    <button wire:click="editDevice({{ $device->id }})"
+                        class="px-3 py-2 text-sm font-medium text-slate-600 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z">
+                            </path>
+                        </svg>
+                    </button>
+
                     <button wire:click="deleteDevice({{ $device->id }})"
                         wire:confirm="Are you sure you want to delete this device? This action cannot be undone."
                         class="px-3 py-2 text-sm font-medium text-rose-600 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 rounded-xl transition-colors">
@@ -144,25 +154,43 @@
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4" x-data
             x-init="$el.querySelector('input')?.focus()">
             <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" wire:click="closeAddModal"></div>
-            <div class="relative w-full max-w-md glass-card rounded-2xl p-6 animate-fade-in-up">
-                <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-4">Add New Device</h3>
+            <div
+                class="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-700 animate-fade-in-up">
+                <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-4">
+                    {{ $isEditing ? 'Edit Device' : 'Add New Device' }}
+                </h3>
 
-                <form wire:submit="createDevice">
-                    <div class="mb-4">
-                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Device
-                            Name</label>
-                        <input type="text" wire:model="deviceName" placeholder="e.g. Customer Support"
-                            class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-                            autofocus>
-                        @error('deviceName')
-                            <p class="mt-1 text-sm text-rose-500">{{ $message }}</p>
-                        @enderror
+                <form wire:submit="save">
+                    <div class="space-y-4 mb-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Device
+                                Name</label>
+                            <input type="text" wire:model="deviceName" placeholder="e.g. Customer Support"
+                                class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all">
+                            @error('deviceName')
+                                <p class="mt-1 text-sm text-rose-500">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Webhook URL
+                                (Optional)</label>
+                            <input type="url" wire:model="webhookUrl" placeholder="https://your-domain.com/webhook"
+                                class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all">
+                            <p class="mt-1 text-xs text-slate-400">Incoming messages will be forwarded to this URL via POST.
+                            </p>
+                            @error('webhookUrl')
+                                <p class="mt-1 text-sm text-rose-500">{{ $message }}</p>
+                            @enderror
+                        </div>
                     </div>
 
-                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">
-                        After creating the device, you'll be asked to scan a QR code with your WhatsApp mobile app to
-                        connect.
-                    </p>
+                    @if(!$isEditing)
+                        <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                            After creating the device, you'll be asked to scan a QR code with your WhatsApp mobile app to
+                            connect.
+                        </p>
+                    @endif
 
                     <div class="flex gap-3">
                         <button type="button" wire:click="closeAddModal"
@@ -171,7 +199,7 @@
                         </button>
                         <button type="submit"
                             class="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium rounded-xl shadow-lg shadow-emerald-500/30 transition-all">
-                            Create & Connect
+                            {{ $isEditing ? 'Update Device' : 'Create & Connect' }}
                         </button>
                     </div>
                 </form>
@@ -183,7 +211,8 @@
     @if($showQrModal)
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4" wire:poll.2s="pollQrCode">
             <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" wire:click="closeQrModal"></div>
-            <div class="relative w-full max-w-md glass-card rounded-2xl p-6 animate-fade-in-up text-center">
+            <div
+                class="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-700 animate-fade-in-up text-center">
                 <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-2">Scan QR Code</h3>
                 <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Open WhatsApp on your phone and scan this QR code
                 </p>

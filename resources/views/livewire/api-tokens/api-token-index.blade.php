@@ -85,7 +85,7 @@
     @if($showModal)
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" wire:click="closeModal"></div>
-            <div class="relative w-full max-w-md glass-card rounded-2xl p-6 animate-fade-in-up">
+            <div class="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-700 animate-fade-in-up">
                 @if($newToken)
                     <!-- Token Created View -->
                     <div class="text-center">

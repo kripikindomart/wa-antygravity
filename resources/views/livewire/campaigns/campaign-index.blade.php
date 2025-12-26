@@ -174,7 +174,7 @@
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" wire:click="closeModal"></div>
             <div
-                class="relative w-full max-w-2xl glass-card rounded-2xl p-6 animate-fade-in-up max-h-[90vh] overflow-y-auto">
+                class="relative w-full max-w-2xl bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-700 animate-fade-in-up max-h-[90vh] overflow-y-auto">
                 <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-4">
                     {{ $isEditing ? 'Edit Campaign' : 'New Campaign' }}
                 </h3>

@@ -18,6 +18,7 @@ class AutoReply extends Model
         'attachment_path',
         'is_active',
         'priority',
+        'hit_count',
     ];
 
     protected $casts = [
