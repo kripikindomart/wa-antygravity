@@ -252,6 +252,40 @@ async function sendImage(sessionId, to, imagePath, caption = '') {
 }
 
 /**
+ * Get participating groups
+ */
+async function getGroups(sessionId) {
+    const session = sessions.get(sessionId);
+    if (!session) {
+        throw new Error('Session not found');
+    }
+
+    try {
+        const groups = await session.groupFetchAllParticipating();
+        return groups;
+    } catch (error) {
+        throw new Error(`Failed to fetch groups: ${error.message}`);
+    }
+}
+
+/**
+ * Get group metadata (participants)
+ */
+async function getGroupMetadata(sessionId, groupId) {
+    const session = sessions.get(sessionId);
+    if (!session) {
+        throw new Error('Session not found');
+    }
+
+    try {
+        const metadata = await session.groupMetadata(groupId);
+        return metadata;
+    } catch (error) {
+        throw new Error(`Failed to fetch group metadata: ${error.message}`);
+    }
+}
+
+/**
  * Send document
  */
 async function sendDocument(sessionId, to, filePath, fileName, caption = '') {
@@ -325,6 +359,8 @@ module.exports = {
     sendMessage,
     sendImage,
     sendDocument,
+    getGroups,
+    getGroupMetadata,
     deleteSession,
     getAllSessions,
 };

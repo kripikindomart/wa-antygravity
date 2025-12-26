@@ -37,6 +37,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // API Tokens
     Route::get('/api-tokens', ApiTokenIndex::class)->name('api-tokens.index');
 
+    // Contact Groups
+    Route::get('/contact-groups', \App\Livewire\ContactGroups\ContactGroupIndex::class)->name('contact-groups.index');
+
     // Settings
     Route::get('/settings', Settings::class)->name('settings');
 });

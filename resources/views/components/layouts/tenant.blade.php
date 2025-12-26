@@ -66,6 +66,10 @@
                     icon="users">
                     <span x-show="open">Contacts</span>
                 </x-tenant.nav-link>
+                <x-tenant.nav-link href="{{ route('contact-groups.index') }}"
+                    :active="request()->routeIs('contact-groups.*')" icon="collection">
+                    <span x-show="open">Groups</span>
+                </x-tenant.nav-link>
                 <x-tenant.nav-link href="{{ route('messages.index') }}" :active="request()->routeIs('messages.*')"
                     icon="chat-alt-2">
                     <span x-show="open">Messages</span>
@@ -245,7 +249,7 @@
                     }
                 });
             });
-        });
+    });
     </script>
     @livewireScripts
 </body>

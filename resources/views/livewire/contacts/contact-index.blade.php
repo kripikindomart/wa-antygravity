@@ -12,6 +12,14 @@
             </svg>
             Add Contact
         </button>
+        <button wire:click="openGrabModal"
+            class="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 font-medium rounded-xl transition-all duration-200">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+            </svg>
+            Grab from WA
+        </button>
     </div>
 
     <!-- Search and Filters -->
@@ -202,4 +210,91 @@
             </div>
         </div>
     @endif
-</div>
+
+    <!-- Grabber Modal -->
+    @if($showGrabModal)
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" wire:click="closeGrabModal"></div>
+            <div class="relative w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-700 animate-fade-in-up">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xl font-bold text-slate-800 dark:text-white">Grab Contacts</h3>
+                    <button wire:click="closeGrabModal" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="space-y-6">
+                    <!-- Step 1: Device Selection -->
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Select Device</label>
+                        <select wire:model.live="selectedDeviceId" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 transition-all">
+                            <option value="">-- Choose Connected Device --</option>
+                            @foreach($this->devices as $device)
+                                <option value="{{ $device->id }}">{{ $device->name }} ({{ $device->phone_number }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    @if($selectedDeviceId)
+                        <!-- Step 2: Grab Mode & Target -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Grab Source</label>
+                                <select wire:model.live="grabMode" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 transition-all">
+                                    <option value="group">From Group</option>
+                                    {{-- <option value="all">All Contacts (Coming Soon)</option> --}}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Save to Group</label>
+                                <select wire:model="targetLocalGroupId" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 transition-all">
+                                    <option value="">-- No Group --</option>
+                                    @foreach($this->groups as $group)
+                                        <option value="{{ $group->id }}">{{ $group->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: WA Group Selection -->
+                        @if($grabMode === 'group')
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                    Select WhatsApp Group
+                                    <span wire:loading wire:target="fetchWaGroups" class="ml-2 text-xs text-emerald-500 animate-pulse">Fetching groups...</span>
+                                </label>
+                                @if(empty($waGroups))
+                                    <div class="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl text-center text-sm text-slate-500">
+                                        No groups found or fetching...
+                                    </div>
+                                @else
+                                    <select wire:model="selectedWaGroupId" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 transition-all">
+                                        <option value="">-- Select a Group --</option>
+                                        @foreach($waGroups as $id => $group)
+                                            {{-- Assuming groups array structure: id => [subject, ...] or just id => name --}}
+                                            {{-- Baileys returns object keyed by JID. $group is the metadata object --}}
+                                            <option value="{{ $group['id'] }}">{{ $group['subject'] ?? 'Unknown Group' }} ({{ $group['size'] ?? '?' }} members)</option>
+                                        @endforeach
+                                    </select>
+                                @endif
+                            </div>
+                        @endif
+                    @endif
+                    
+                    <!-- Action -->
+                    <div class="pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-end">
+                        <button wire:click="startGrabbing" wire:loading.attr="disabled"
+                            class="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-xl shadow-lg shadow-emerald-500/30 transition-all flex items-center gap-2">
+                            <svg wire:loading wire:target="startGrabbing" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Start Grabbing</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif

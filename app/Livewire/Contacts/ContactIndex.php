@@ -142,6 +142,146 @@ class ContactIndex extends Component
         $this->resetPage();
     }
 
+    // Grabber Properties
+    public bool $showGrabModal = false;
+    public int $grabStep = 1; // 1: Select Device & Mode, 2: Select Group (if applicable), 3: Processing
+    public string $grabMode = 'group'; // 'all' or 'group'
+    public ?int $selectedDeviceId = null;
+    public array $waGroups = [];
+    public ?string $selectedWaGroupId = null;
+    public ?int $targetLocalGroupId = null;
+    public bool $isGrabbing = false;
+
+    public function openGrabModal()
+    {
+        $this->resetGrabber();
+        $this->showGrabModal = true;
+    }
+
+    public function closeGrabModal()
+    {
+        $this->showGrabModal = false;
+        $this->resetGrabber();
+    }
+
+    public function resetGrabber()
+    {
+        $this->grabStep = 1;
+        $this->grabMode = 'group';
+        $this->selectedDeviceId = null;
+        $this->waGroups = [];
+        $this->selectedWaGroupId = null;
+        $this->targetLocalGroupId = null;
+        $this->isGrabbing = false;
+    }
+
+    #[Computed]
+    public function devices()
+    {
+        return Auth::user()->devices()->where('status', 'connected')->get();
+    }
+
+    public function updatedSelectedDeviceId()
+    {
+        if ($this->selectedDeviceId && $this->grabMode === 'group') {
+            $this->fetchWaGroups();
+        }
+    }
+
+    public function updatedGrabMode()
+    {
+        if ($this->selectedDeviceId && $this->grabMode === 'group') {
+            $this->fetchWaGroups();
+        }
+    }
+
+    public function fetchWaGroups()
+    {
+        if (!$this->selectedDeviceId)
+            return;
+
+        $device = Auth::user()->devices()->find($this->selectedDeviceId);
+        if (!$device)
+            return;
+
+        try {
+            $nodeUrl = config('services.whatsapp.url');
+            $response = \Illuminate\Support\Facades\Http::timeout(15)->get("{$nodeUrl}/sessions/{$device->token}/groups");
+
+            if ($response->successful()) {
+                $this->waGroups = $response->json()['groups'] ?? [];
+            } else {
+                $this->dispatch('notify', ['type' => 'error', 'message' => 'Failed to fetch groups from WhatsApp.']);
+            }
+        } catch (\Exception $e) {
+            $this->dispatch('notify', ['type' => 'error', 'message' => 'Node service unreachable.']);
+        }
+    }
+
+    public function startGrabbing()
+    {
+        $this->validate([
+            'selectedDeviceId' => 'required',
+            'targetLocalGroupId' => 'nullable|exists:contact_groups,id',
+            'selectedWaGroupId' => 'required_if:grabMode,group',
+        ]);
+
+        $this->isGrabbing = true;
+
+        try {
+            $device = Auth::user()->devices()->find($this->selectedDeviceId);
+            $nodeUrl = config('services.whatsapp.url');
+            $contactsToSave = [];
+
+            if ($this->grabMode === 'group') {
+                // Fetch group participants
+                $response = \Illuminate\Support\Facades\Http::timeout(30)->get("{$nodeUrl}/sessions/{$device->token}/groups/{$this->selectedWaGroupId}");
+
+                if ($response->successful()) {
+                    $metadata = $response->json()['metadata'] ?? [];
+                    $participants = $metadata['participants'] ?? [];
+
+                    foreach ($participants as $participant) {
+                        $jid = $participant['id'];
+                        // Skip if it's the sender himself
+                        if (str_contains($jid, $device->body))
+                            continue;
+
+                        $number = explode('@', $jid)[0];
+                        $contactsToSave[] = [
+                            'name' => 'WA User ' . $number, // Default name, maybe fetch deeper if needed
+                            'number' => $number,
+                        ];
+                    }
+                }
+            } else {
+                // Grab All logic (future implementation or if endpoint exists)
+                // For now, limited to Group Grabber as per immediate requirement availability
+            }
+
+            $count = 0;
+            foreach ($contactsToSave as $c) {
+                // Check if exists
+                if (!Auth::user()->contacts()->where('phone_number', $c['number'])->exists()) {
+                    Auth::user()->contacts()->create([
+                        'name' => $c['name'],
+                        'phone_number' => $c['number'],
+                        'contact_group_id' => $this->targetLocalGroupId,
+                    ]);
+                    $count++;
+                }
+            }
+
+            $this->dispatch('notify', ['type' => 'success', 'message' => "Successfully grabbed {$count} new contacts."]);
+            $this->closeGrabModal();
+
+        } catch (\Exception $e) {
+            $this->dispatch('notify', ['type' => 'error', 'message' => 'Error during grabbing: ' . $e->getMessage()]);
+        } finally {
+            $this->isGrabbing = false;
+        }
+    }
+
     public function render()
     {
         $query = Auth::user()->contacts()

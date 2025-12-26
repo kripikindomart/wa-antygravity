@@ -117,6 +117,44 @@ router.delete('/:sessionId', async (req, res) => {
 });
 
 /**
+ * GET /sessions/:sessionId/groups
+ * Get participating groups
+ */
+router.get('/:sessionId/groups', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const groups = await whatsapp.getGroups(sessionId);
+        
+        res.json({
+            success: true,
+            groups,
+        });
+    } catch (error) {
+        console.error('Error fetching groups:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /sessions/:sessionId/groups/:groupId
+ * Get group metadata (participants)
+ */
+router.get('/:sessionId/groups/:groupId', async (req, res) => {
+    try {
+        const { sessionId, groupId } = req.params;
+        const metadata = await whatsapp.getGroupMetadata(sessionId, groupId);
+        
+        res.json({
+            success: true,
+            metadata,
+        });
+    } catch (error) {
+        console.error('Error fetching group metadata:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
  * GET /sessions
  * Get all active sessions
  */
