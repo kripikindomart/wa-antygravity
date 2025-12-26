@@ -132,7 +132,7 @@
                                 Pause
                             </button>
                         @endif
-                        <button wire:click="delete({{ $campaign->id }})" wire:confirm="Delete this campaign?"
+                        <button wire:click="confirmDelete({{ $campaign->id }})"
                             class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-500 hover:text-rose-600">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

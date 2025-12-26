@@ -129,12 +129,33 @@ class AutoReplyIndex extends Component
         $this->dispatch('notify', ['type' => 'success', 'message' => "Rule {$status}."]);
     }
 
+    public ?int $replyToDelete = null;
+
+    public function confirmDelete($replyId)
+    {
+        $this->replyToDelete = $replyId;
+        $this->dispatch(
+            'show-delete-confirmation',
+            action: 'delete-reply-confirmed',
+            title: 'Delete Auto-Reply?',
+            text: 'This rule will be permanently deleted.'
+        );
+    }
+
+    #[\Livewire\Attributes\On('delete-reply-confirmed')]
+    public function deleteReplyConfirmed()
+    {
+        if ($this->replyToDelete) {
+            $rule = Auth::user()->autoReplies()->findOrFail($this->replyToDelete);
+            $rule->delete();
+            $this->replyToDelete = null;
+            $this->dispatch('notify', ['type' => 'success', 'message' => 'Rule deleted.']);
+        }
+    }
+
     public function delete($id)
     {
-        $rule = Auth::user()->autoReplies()->findOrFail($id);
-        $rule->delete();
-
-        $this->dispatch('notify', ['type' => 'success', 'message' => 'Rule deleted.']);
+        $this->confirmDelete($id);
     }
 
     public function render()

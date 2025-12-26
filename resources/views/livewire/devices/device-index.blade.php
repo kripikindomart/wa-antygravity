@@ -113,8 +113,7 @@
                         </svg>
                     </button>
 
-                    <button wire:click="deleteDevice({{ $device->id }})"
-                        wire:confirm="Are you sure you want to delete this device? This action cannot be undone."
+                    <button wire:click="confirmDelete({{ $device->id }})"
                         class="px-3 py-2 text-sm font-medium text-rose-600 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 rounded-xl transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

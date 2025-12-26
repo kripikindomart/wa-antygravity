@@ -105,7 +105,8 @@
                     </div>
                     <div x-show="open" class="flex-1 min-w-0">
                         <p class="text-sm font-medium text-slate-800 dark:text-white truncate">
-                            {{ auth()->user()->name ?? 'User' }}</p>
+                            {{ auth()->user()->name ?? 'User' }}
+                        </p>
                         <p class="text-xs text-slate-500 dark:text-slate-400 truncate">{{ auth()->user()->email ??
                             'user@example.com' }}</p>
                     </div>
@@ -218,6 +219,30 @@
         </template>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        document.addEventListener('livewire:initialized', () => {
+            Livewire.on('show-delete-confirmation', ({
+                action,
+                title,
+                text
+            }) => {
+                Swal.fire({
+                    title: title || 'Are you sure?',
+                    text: text || "You won't be able to revert this!",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#10b981',
+                    cancelButtonColor: '#ef4444',
+                    confirmButtonText: 'Yes, delete it!'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        Livewire.dispatch(action);
+                    }
+                });
+            });
+        });
+    </script>
     @livewireScripts
 </body>
 

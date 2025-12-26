@@ -54,15 +54,36 @@ class ApiTokenIndex extends Component
         ]);
     }
 
+    public ?int $tokenToDelete = null;
+
+    public function confirmDelete($tokenId)
+    {
+        $this->tokenToDelete = $tokenId;
+        $this->dispatch(
+            'show-delete-confirmation',
+            action: 'delete-token-confirmed',
+            title: 'Revoke API Token?',
+            text: 'Any external application using this token will lose access immediately.'
+        );
+    }
+
+    #[\Livewire\Attributes\On('delete-token-confirmed')]
+    public function deleteTokenConfirmed()
+    {
+        if ($this->tokenToDelete) {
+            $token = Auth::user()->tokens()->findOrFail($this->tokenToDelete);
+            $token->delete();
+            $this->tokenToDelete = null;
+            $this->dispatch('notify', [
+                'type' => 'success',
+                'message' => 'Token deleted.',
+            ]);
+        }
+    }
+
     public function deleteToken($tokenId)
     {
-        $token = Auth::user()->tokens()->findOrFail($tokenId);
-        $token->delete();
-
-        $this->dispatch('notify', [
-            'type' => 'success',
-            'message' => 'Token deleted.',
-        ]);
+        $this->confirmDelete($tokenId);
     }
 
     public function render()

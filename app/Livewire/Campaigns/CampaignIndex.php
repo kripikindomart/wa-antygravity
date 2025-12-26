@@ -201,11 +201,33 @@ class CampaignIndex extends Component
         $this->dispatch('notify', ['type' => 'info', 'message' => 'Campaign paused.']);
     }
 
+    public ?int $campaignToDelete = null;
+
+    public function confirmDelete($campaignId)
+    {
+        $this->campaignToDelete = $campaignId;
+        $this->dispatch(
+            'show-delete-confirmation',
+            action: 'delete-campaign-confirmed',
+            title: 'Delete Campaign?',
+            text: 'This will delete the campaign and its history.'
+        );
+    }
+
+    #[\Livewire\Attributes\On('delete-campaign-confirmed')]
+    public function deleteCampaignConfirmed()
+    {
+        if ($this->campaignToDelete) {
+            $campaign = Auth::user()->campaigns()->findOrFail($this->campaignToDelete);
+            $campaign->delete();
+            $this->campaignToDelete = null;
+            $this->dispatch('notify', ['type' => 'success', 'message' => 'Campaign deleted.']);
+        }
+    }
+
     public function delete($id)
     {
-        $campaign = Auth::user()->campaigns()->findOrFail($id);
-        $campaign->delete();
-        $this->dispatch('notify', ['type' => 'success', 'message' => 'Campaign deleted.']);
+        $this->confirmDelete($id);
     }
 
     public function render()

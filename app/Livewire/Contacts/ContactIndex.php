@@ -102,12 +102,34 @@ class ContactIndex extends Component
         $this->showModal = true;
     }
 
+    public ?int $contactToDelete = null;
+
+    public function confirmDelete($contactId)
+    {
+        $this->contactToDelete = $contactId;
+        $this->dispatch(
+            'show-delete-confirmation',
+            action: 'delete-contact-confirmed',
+            title: 'Delete Contact?',
+            text: 'Are you sure you want to delete this contact?'
+        );
+    }
+
+    #[\Livewire\Attributes\On('delete-contact-confirmed')]
+    public function deleteContactConfirmed()
+    {
+        if ($this->contactToDelete) {
+            $contact = Auth::user()->contacts()->findOrFail($this->contactToDelete);
+            $contact->delete();
+            $this->contactToDelete = null;
+            $this->dispatch('notify', ['type' => 'success', 'message' => 'Contact deleted.']);
+        }
+    }
+
+    // Deprecated direct delete, kept just in case but view will use confirmDelete
     public function delete($contactId)
     {
-        $contact = Auth::user()->contacts()->findOrFail($contactId);
-        $contact->delete();
-
-        $this->dispatch('notify', ['type' => 'success', 'message' => 'Contact deleted.']);
+        $this->confirmDelete($contactId);
     }
 
     public function updatedSearch()

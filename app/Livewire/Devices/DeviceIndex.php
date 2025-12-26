@@ -225,6 +225,28 @@ class DeviceIndex extends Component
         ]);
     }
 
+    public ?int $deviceToDelete = null;
+
+    public function confirmDelete($deviceId)
+    {
+        $this->deviceToDelete = $deviceId;
+        $this->dispatch(
+            'show-delete-confirmation',
+            action: 'delete-device-confirmed',
+            title: 'Delete Device?',
+            text: 'This will disconnect the device and delete all associated messages and logs.'
+        );
+    }
+
+    #[\Livewire\Attributes\On('delete-device-confirmed')]
+    public function deleteDeviceConfirmed()
+    {
+        if ($this->deviceToDelete) {
+            $this->deleteDevice($this->deviceToDelete);
+            $this->deviceToDelete = null;
+        }
+    }
+
     public function deleteDevice($deviceId)
     {
         $device = Auth::user()->devices()->findOrFail($deviceId);

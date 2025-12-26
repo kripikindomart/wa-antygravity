@@ -53,10 +53,10 @@
                     <div>
                         <p class="font-medium text-slate-800 dark:text-white">{{ $token->name }}</p>
                         <p class="text-xs text-slate-500">Created {{ $token->created_at->diffForHumans() }} • Last used
-                            {{ $token->last_used_at?->diffForHumans() ?? 'Never' }}</p>
+                            {{ $token->last_used_at?->diffForHumans() ?? 'Never' }}
+                        </p>
                     </div>
-                    <button wire:click="deleteToken({{ $token->id }})"
-                        wire:confirm="Revoke this token? Any applications using it will lose access."
+                    <button wire:click="confirmDelete({{ $token->id }})"
                         class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-500 hover:text-rose-600">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -85,7 +85,8 @@
     @if($showModal)
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" wire:click="closeModal"></div>
-            <div class="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-700 animate-fade-in-up">
+            <div
+                class="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-700 animate-fade-in-up">
                 @if($newToken)
                     <!-- Token Created View -->
                     <div class="text-center">
