@@ -189,6 +189,10 @@
     <div x-data="{ 
             notifications: [],
             add(notification) {
+                // Handle Livewire 3 array payload wrapper
+                if (Array.isArray(notification)) {
+                    notification = notification[0];
+                }
                 notification.id = Date.now();
                 this.notifications.push(notification);
                 setTimeout(() => this.remove(notification.id), 5000);
