@@ -31,6 +31,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Auto Replies
     Route::get('/auto-replies', AutoReplyIndex::class)->name('auto-replies.index');
 
+    // Daily Leads
+    Route::get('/leads', App\Livewire\Leads\LeadIndex::class)->name('leads.index');
+
     // API Tokens
     Route::get('/api-tokens', ApiTokenIndex::class)->name('api-tokens.index');
 
