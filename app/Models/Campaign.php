@@ -13,7 +13,8 @@ class Campaign extends Model
         'device_id',
         'name',
         'message',
-        'type',
+        'type', // message content type
+        'audience_type', // group or import
         'attachment_path',
         'target_contacts',
         'target_groups',
@@ -25,11 +26,14 @@ class Campaign extends Model
         'sent_count',
         'failed_count',
         'delay_seconds',
+        'error_mode',
+        'mapping_config',
     ];
 
     protected $casts = [
         'target_contacts' => 'array',
         'target_groups' => 'array',
+        'mapping_config' => 'array',
         'scheduled_at' => 'datetime',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
@@ -48,6 +52,11 @@ class Campaign extends Model
     public function messages(): HasMany
     {
         return $this->hasMany(Message::class);
+    }
+
+    public function recipients(): HasMany
+    {
+        return $this->hasMany(CampaignRecipient::class);
     }
 
     public function getProgressPercentageAttribute(): float

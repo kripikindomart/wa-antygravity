@@ -76,7 +76,11 @@
                 </x-tenant.nav-link>
                 <x-tenant.nav-link href="{{ route('campaigns.index') }}" :active="request()->routeIs('campaigns.*')"
                     icon="speakerphone">
-                    <span x-show="open">Campaigns</span>
+                    <span x-show="open">Broadcast</span>
+                </x-tenant.nav-link>
+                <x-tenant.nav-link href="{{ route('templates.index') }}" :active="request()->routeIs('templates.*')"
+                    icon="template">
+                    <span x-show="open">Templates</span>
                 </x-tenant.nav-link>
                 <x-tenant.nav-link href="{{ route('auto-replies.index') }}"
                     :active="request()->routeIs('auto-replies.*')" icon="reply">
@@ -249,7 +253,13 @@
                     }
                 });
             });
-    });
+
+            // Listen for notify events from Livewire components
+            Livewire.on('notify', (data) => {
+                const notification = Array.isArray(data) ? data[0] : data;
+                window.dispatchEvent(new CustomEvent('notify', { detail: notification }));
+            });
+        });
     </script>
     @livewireScripts
 </body>

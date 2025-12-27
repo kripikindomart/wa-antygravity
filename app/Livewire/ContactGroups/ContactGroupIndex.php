@@ -95,15 +95,31 @@ class ContactGroupIndex extends Component
         }
     }
 
+    public $activeTab = 'groups';
+
     public function render()
     {
         $groups = Auth::user()->contactGroups()
+            ->withCount('contacts')
             ->where('name', 'like', '%' . $this->search . '%')
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
+        $uncategorizedContacts = [];
+        if ($this->activeTab === 'uncategorized') {
+            $uncategorizedContacts = Auth::user()->contacts()
+                ->whereNull('contact_group_id')
+                ->where(function ($q) {
+                    $q->where('name', 'like', '%' . $this->search . '%')
+                        ->orWhere('phone_number', 'like', '%' . $this->search . '%');
+                })
+                ->latest()
+                ->paginate(15);
+        }
+
         return view('livewire.contact-groups.contact-group-index', [
             'groups' => $groups,
+            'uncategorizedContacts' => $uncategorizedContacts,
         ])->layout('components.layouts.tenant', ['title' => 'Contact Groups']);
     }
 }

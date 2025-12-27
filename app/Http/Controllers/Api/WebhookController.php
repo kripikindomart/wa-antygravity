@@ -132,7 +132,7 @@ class WebhookController extends Controller
         }
 
         // Check for auto-replies
-        $this->processAutoReply($device, $fromNumber, $messageContent);
+        $this->processAutoReply($device, $rawFrom, $messageContent);
 
         // Save as Daily Lead
         $this->saveLead($device, $fromNumber, $data['fromName'] ?? null, $messageContent);

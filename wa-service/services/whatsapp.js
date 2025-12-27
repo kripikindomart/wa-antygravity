@@ -11,9 +11,11 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const QRCode = require('qrcode');
+const SimpleStore = require('./simple-store');
 
 // Store active sessions
 const sessions = new Map();
+const stores = new Map();
 const qrCodes = new Map();
 
 const SESSION_DIR = process.env.SESSION_DIR || './sessions';
@@ -68,7 +70,13 @@ async function createSession(sessionId) {
         },
         generateHighQualityLinkPreview: true,
         getMessage: async () => undefined,
+        syncFullHistory: true, // Request full history for contacts
     });
+
+    // Initialize Store
+    const store = new SimpleStore(path.join(SESSION_DIR, `store-${sessionId}.json`));
+    store.bind(socket.ev);
+    stores.set(sessionId, store);
 
     // Handle connection updates
     socket.ev.on('connection.update', async (update) => {
@@ -97,6 +105,7 @@ async function createSession(sessionId) {
             } else {
                 // Session logged out, clean up
                 sessions.delete(sessionId);
+                stores.delete(sessionId);
                 qrCodes.delete(sessionId);
                 
                 await sendWebhook('connection.update', {
@@ -217,9 +226,9 @@ async function sendMessage(sessionId, to, message, options = {}) {
     }
 
     // Format phone number for WhatsApp
-    let jid = to.replace(/[^0-9]/g, '');
-    if (!jid.endsWith('@s.whatsapp.net')) {
-        jid = `${jid}@s.whatsapp.net`;
+    let jid = to;
+    if (!jid.includes('@')) {
+        jid = jid.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
     }
 
     const messageContent = { text: message };
@@ -237,9 +246,9 @@ async function sendImage(sessionId, to, imagePath, caption = '') {
         throw new Error('Session not found');
     }
 
-    let jid = to.replace(/[^0-9]/g, '');
-    if (!jid.endsWith('@s.whatsapp.net')) {
-        jid = `${jid}@s.whatsapp.net`;
+    let jid = to;
+    if (!jid.includes('@')) {
+        jid = jid.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
     }
 
     const messageContent = {
@@ -269,7 +278,7 @@ async function getGroups(sessionId) {
 }
 
 /**
- * Get group metadata (participants)
+ * Get group metadata (participants) with Name Enrichment
  */
 async function getGroupMetadata(sessionId, groupId) {
     const session = sessions.get(sessionId);
@@ -279,6 +288,22 @@ async function getGroupMetadata(sessionId, groupId) {
 
     try {
         const metadata = await session.groupMetadata(groupId);
+        
+        // Enrich participants with names from store
+        const store = stores.get(sessionId);
+        if (store && metadata.participants) {
+            metadata.participants = metadata.participants.map(p => {
+                const name = store.getName(p.id);
+                // We provide both name and displayName, though logic might prefer one
+                return {
+                    ...p,
+                    name: name, 
+                    notify: name, // Populate typical fields
+                    displayName: name || p.id.split('@')[0]
+                };
+            });
+        }
+        
         return metadata;
     } catch (error) {
         throw new Error(`Failed to fetch group metadata: ${error.message}`);
@@ -294,59 +319,18 @@ async function sendDocument(sessionId, to, filePath, fileName, caption = '') {
         throw new Error('Session not found');
     }
 
-    let jid = to.replace(/[^0-9]/g, '');
-    if (!jid.endsWith('@s.whatsapp.net')) {
-        jid = `${jid}@s.whatsapp.net`;
+    let jid = to;
+    if (!jid.includes('@')) {
+        jid = jid.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
     }
 
     const messageContent = {
         document: { url: filePath },
-        fileName,
-        caption,
+        fileName: fileName,
+        caption: caption
     };
 
     const result = await session.sendMessage(jid, messageContent);
-    return result;
-}
-
-/**
- * Delete/logout session
- */
-async function deleteSession(sessionId) {
-    const session = sessions.get(sessionId);
-    if (session) {
-        await session.logout();
-        sessions.delete(sessionId);
-    }
-    
-    qrCodes.delete(sessionId);
-    
-    // Delete session files
-    const sessionPath = path.join(SESSION_DIR, sessionId);
-    if (fs.existsSync(sessionPath)) {
-        fs.rmSync(sessionPath, { recursive: true, force: true });
-    }
-
-    await sendWebhook('connection.update', {
-        sessionId,
-        status: 'disconnected',
-        reason: 'manual_logout',
-    });
-}
-
-/**
- * Get all active sessions
- */
-function getAllSessions() {
-    const result = [];
-    for (const [sessionId, session] of sessions) {
-        result.push({
-            sessionId,
-            connected: session.user !== undefined,
-            phoneNumber: session.user?.id?.split(':')[0],
-            name: session.user?.name,
-        });
-    }
     return result;
 }
 
@@ -358,9 +342,7 @@ module.exports = {
     getSessionInfo,
     sendMessage,
     sendImage,
-    sendDocument,
     getGroups,
     getGroupMetadata,
-    deleteSession,
-    getAllSessions,
+    sendDocument
 };

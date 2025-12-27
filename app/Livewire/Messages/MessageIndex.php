@@ -169,14 +169,27 @@ class MessageIndex extends Component
         $this->resetPage();
     }
 
+    public string $activeTab = 'sent'; // sent, inbox
+
+    public function updatedActiveTab()
+    {
+        $this->resetPage();
+    }
+
     public function render()
     {
-        $query = Auth::user()->messages()
-            ->with(['device'])
-            ->when($this->filterStatus, function ($q) {
-                $q->where('status', $this->filterStatus);
-            })
-            ->latest();
+        if ($this->activeTab === 'inbox') {
+            $query = Auth::user()->inboxes()
+                ->with(['device'])
+                ->latest('received_at');
+        } else {
+            $query = Auth::user()->messages()
+                ->with(['device'])
+                ->when($this->filterStatus, function ($q) {
+                    $q->where('status', $this->filterStatus);
+                })
+                ->latest();
+        }
 
         return view('livewire.messages.message-index', [
             'messages' => $query->paginate(15),

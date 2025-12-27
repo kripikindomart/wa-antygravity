@@ -23,11 +23,20 @@ class CampaignIndex extends Component
     public bool $isEditing = false;
     public ?int $editingId = null;
 
+    protected $listeners = ['refresh' => '$refresh'];
+
+    public function boot()
+    {
+        // Poll every 3 seconds to check status of running campaigns
+        $this->dispatch('poll-status');
+    }
+
     public string $name = '';
     public string $message = '';
     public ?int $device_id = null;
     public array $selectedContacts = [];
     public int $delay_seconds = 10;
+    public ?int $selectedTemplateId = null;
 
     protected $rules = [
         'name' => 'required|min:2|max:100',
@@ -52,6 +61,120 @@ class CampaignIndex extends Component
     public function contacts()
     {
         return Auth::user()->contacts()->orderBy('name')->get();
+    }
+
+    #[Computed]
+    public function templates()
+    {
+        return Auth::user()->messageTemplates()->orderByDesc('is_favorite')->orderBy('name')->get();
+    }
+
+    public function processNextBatch($campaignId)
+    {
+        $campaign = Campaign::with('device')->find($campaignId);
+
+        if (!$campaign || $campaign->status !== 'running') {
+            return ['status' => 'stopped'];
+        }
+
+        // Get next pending recipient
+        $recipient = $campaign->recipients()->where('status', 'pending')->first();
+
+        if (!$recipient) {
+            $campaign->update(['status' => 'completed', 'completed_at' => now()]);
+            return ['status' => 'completed'];
+        }
+
+        $device = $campaign->device;
+        if (!$device || $device->status !== 'connected') {
+            return ['status' => 'error', 'message' => 'Device disconnected'];
+        }
+
+        // Send logic (Single Recipient)
+        try {
+            // Prepare Message
+            $template = $campaign->message;
+            $message = str_replace('[name]', $recipient->name, $template);
+            $message = str_replace('[phone]', $recipient->phone_number, $message);
+
+            if ($recipient->custom_data) {
+                foreach ($recipient->custom_data as $key => $value) {
+                    $message = str_replace('[' . $key . ']', $value, $message);
+                }
+            }
+
+            $nodeUrl = config('services.whatsapp.url', 'http://127.0.0.1:3001');
+            $response = Http::timeout(30)->post("{$nodeUrl}/messages/send", [
+                'sessionId' => $device->token,
+                'to' => $recipient->phone_number,
+                'message' => $message,
+            ]);
+
+            if ($response->successful()) {
+                $recipient->update([
+                    'status' => 'sent',
+                    'sent_at' => now(),
+                    'wa_message_id' => $response->json('messageId')
+                ]);
+                $campaign->increment('sent_count');
+
+                // Log to Message History
+                Message::create([
+                    'user_id' => Auth::id(),
+                    'device_id' => $device->id,
+                    'campaign_id' => $campaign->id,
+                    'to' => $recipient->phone_number,
+                    'message' => $message,
+                    'type' => 'text',
+                    'status' => 'sent',
+                    'wa_message_id' => $response->json('messageId'),
+                ]);
+
+                return [
+                    'status' => 'processing',
+                    'sent' => true,
+                    'sent_count' => $campaign->sent_count,
+                    'failed_count' => $campaign->failed_count,
+                    'progress' => $campaign->progress_percentage,
+                    'delay_seconds' => $campaign->delay_seconds
+                ];
+            } else {
+                throw new \Exception($response->body());
+            }
+
+        } catch (\Exception $e) {
+            $recipient->update(['status' => 'failed', 'error_message' => $e->getMessage()]);
+            $campaign->increment('failed_count');
+
+            if ($campaign->error_mode === 'stop') {
+                $campaign->update(['status' => 'paused']);
+                return ['status' => 'stopped', 'error' => $e->getMessage()];
+            }
+
+            return [
+                'status' => 'processing',
+                'sent' => false,
+                'error' => $e->getMessage(),
+                'sent_count' => $campaign->sent_count,
+                'failed_count' => $campaign->failed_count,
+                'progress' => $campaign->progress_percentage
+            ];
+        }
+    }
+
+    public function loadTemplate($templateId)
+    {
+        if (!$templateId)
+            return;
+        $template = Auth::user()->messageTemplates()->find($templateId);
+        if ($template) {
+            $this->message = $template->content;
+        }
+    }
+
+    public function updatedSelectedTemplateId($value)
+    {
+        $this->loadTemplate($value);
     }
 
     public function openModal()
@@ -122,76 +245,24 @@ class CampaignIndex extends Component
     public function startCampaign($id)
     {
         $campaign = Auth::user()->campaigns()->findOrFail($id);
-        $device = $campaign->device;
 
-        if (!$device || $device->status !== 'connected') {
-            $this->dispatch('notify', ['type' => 'error', 'message' => 'Device is not connected.']);
-            return;
+        if ($campaign->status === 'draft') {
+            $campaign->update(['status' => 'running', 'started_at' => now()]);
         }
 
-        $campaign->update([
-            'status' => 'running',
-            'started_at' => now(),
-            'sent_count' => 0,
-            'failed_count' => 0,
-        ]);
+        // Use dispatchSync to run immediately without queue worker
+        try {
+            \App\Jobs\ProcessCampaignJob::dispatchSync($campaign->id);
 
-        // Get contacts
-        $contacts = Contact::whereIn('id', $campaign->target_contacts)->get();
-
-        // Create messages and send in background
-        foreach ($contacts as $index => $contact) {
-            $msg = Message::create([
-                'user_id' => Auth::id(),
-                'device_id' => $device->id,
-                'campaign_id' => $campaign->id,
-                'to' => $contact->phone_number,
-                'message' => $campaign->message,
-                'type' => 'text',
-                'status' => 'pending',
-            ]);
-
-            // For demo: send synchronously with delay
-            // In production, use Laravel Jobs
-            try {
-                $nodeUrl = config('services.whatsapp.url', 'http://127.0.0.1:3001');
-                $response = Http::timeout(30)->post("{$nodeUrl}/messages/send", [
-                    'sessionId' => $device->token,
-                    'to' => $contact->phone_number,
-                    'message' => $campaign->message,
-                ]);
-
-                if ($response->successful()) {
-                    $msg->update([
-                        'status' => 'sent',
-                        'wa_message_id' => $response->json('messageId'),
-                        'sent_at' => now(),
-                    ]);
-                    $campaign->increment('sent_count');
-                } else {
-                    $msg->update(['status' => 'failed', 'error_message' => $response->body()]);
-                    $campaign->increment('failed_count');
-                }
-            } catch (\Exception $e) {
-                $msg->update(['status' => 'failed', 'error_message' => $e->getMessage()]);
-                $campaign->increment('failed_count');
-            }
-
-            // Delay between messages (only if not last)
-            if ($index < $contacts->count() - 1) {
-                sleep($campaign->delay_seconds);
-            }
+            $this->dispatch('notify', ['type' => 'success', 'message' => 'Campaign processing started!']);
+        } catch (\Exception $e) {
+            $this->dispatch('notify', ['type' => 'error', 'message' => 'Error starting campaign: ' . $e->getMessage()]);
         }
+    }
 
-        $campaign->update([
-            'status' => 'completed',
-            'completed_at' => now(),
-        ]);
-
-        $this->dispatch('notify', [
-            'type' => 'success',
-            'message' => "Campaign completed! Sent: {$campaign->sent_count}, Failed: {$campaign->failed_count}",
-        ]);
+    public function forceProcess($id)
+    {
+        $this->startCampaign($id);
     }
 
     public function pauseCampaign($id)

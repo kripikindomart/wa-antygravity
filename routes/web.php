@@ -21,15 +21,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Contacts
     Route::get('/contacts', ContactIndex::class)->name('contacts.index');
+    Route::get('/contacts/all', ContactIndex::class)->name('contacts.all');
+    Route::get('/contacts/group/{groupId}', ContactIndex::class)->name('contacts.group');
 
     // Messages
     Route::get('/messages', MessageIndex::class)->name('messages.index');
 
     // Campaigns / Broadcast
     Route::get('/campaigns', CampaignIndex::class)->name('campaigns.index');
+    Route::get('/campaigns/create', \App\Livewire\Campaigns\BroadcastWizard::class)->name('campaigns.create');
+    Route::get('/campaigns/{campaign}', \App\Livewire\Campaigns\CampaignShow::class)->name('campaigns.show');
 
     // Auto Replies
     Route::get('/auto-replies', AutoReplyIndex::class)->name('auto-replies.index');
+
+    // Message Templates
+    Route::get('/templates', \App\Livewire\Templates\TemplateIndex::class)->name('templates.index');
 
     // Daily Leads
     Route::get('/leads', App\Livewire\Leads\LeadIndex::class)->name('leads.index');

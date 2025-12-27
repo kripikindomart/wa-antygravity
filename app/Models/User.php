@@ -90,4 +90,14 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->hasMany(AutoReply::class);
     }
+
+    public function messageTemplates(): HasMany
+    {
+        return $this->hasMany(MessageTemplate::class);
+    }
+
+    public function inboxes(): \Illuminate\Database\Eloquent\Relations\HasManyThrough
+    {
+        return $this->hasManyThrough(Inbox::class, Device::class);
+    }
 }

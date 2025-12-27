@@ -10,6 +10,7 @@ use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
 use Livewire\WithPagination;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
 
 #[Layout('components.layouts.tenant')]
 #[Title('Contacts')]
@@ -20,6 +21,9 @@ class ContactIndex extends Component
     public bool $showModal = false;
     public bool $isEditing = false;
     public ?int $editingContactId = null;
+    public string $activeTab = 'groups'; // 'groups' or 'uncategorized' (or 'all')
+    public array $selectedContacts = []; // For bulk actions
+    public bool $selectAll = false; // Select all checkbox state
 
     public string $name = '';
     public string $phone_number = '';
@@ -36,16 +40,86 @@ class ContactIndex extends Component
         'contact_group_id' => 'nullable|exists:contact_groups,id',
     ];
 
+    // Grabber Properties
+    public bool $showGrabModal = false;
+    public int $grabStep = 1;
+    public string $grabMode = 'group';
+    public ?int $selectedDeviceId = null;
+    public array $waGroups = [];
+    public array $selectedWaGroupIds = [];
+    public ?int $targetLocalGroupId = null;
+    public bool $isGrabbing = false;
+
+    public function mount($groupId = null)
+    {
+        if ($groupId) {
+            $this->filterGroup = $groupId;
+        }
+    }
+
+    #[Computed]
+    public function activeGroup()
+    {
+        if ($this->filterGroup) {
+            return Auth::user()->contactGroups()->find($this->filterGroup);
+        }
+        return null;
+    }
+
     #[Computed]
     public function groups()
     {
-        return Auth::user()->contactGroups()->orderBy('name')->get();
+        return Auth::user()->contactGroups()->withCount('contacts')->orderBy('name')->get();
     }
 
-    public function openModal()
+    // Confirm Bulk Delete
+    public function confirmBulkDelete()
     {
-        $this->resetForm();
-        $this->showModal = true;
+        if (empty($this->selectedContacts))
+            return;
+
+        $count = count($this->selectedContacts);
+        $this->dispatch(
+            'show-delete-confirmation',
+            action: 'delete-selected-confirmed',
+            title: "Delete $count Contacts?",
+            text: "You are about to delete $count selected contacts. This cannot be undone."
+        );
+    }
+
+    #[\Livewire\Attributes\On('delete-selected-confirmed')]
+    public function deleteSelectedConfirmed()
+    {
+        if (empty($this->selectedContacts))
+            return;
+
+        Auth::user()->contacts()->whereIn('id', $this->selectedContacts)->delete();
+        $this->selectedContacts = [];
+        $this->selectAll = false;
+        $this->dispatch('notify', ['type' => 'success', 'message' => 'Selected contacts deleted successfully.']);
+    }
+
+    public ?int $contactToDelete = null;
+
+    public function confirmDelete($contactId)
+    {
+        $this->contactToDelete = $contactId;
+        $this->dispatch(
+            'show-delete-confirmation',
+            action: 'delete-contact-confirmed',
+            title: 'Delete Contact?',
+            text: 'This contact will be permanently deleted.'
+        );
+    }
+
+    #[\Livewire\Attributes\On('delete-contact-confirmed')]
+    public function deleteContactConfirmed()
+    {
+        if ($this->contactToDelete) {
+            Auth::user()->contacts()->where('id', $this->contactToDelete)->delete();
+            $this->contactToDelete = null;
+            $this->dispatch('notify', ['type' => 'success', 'message' => 'Contact deleted successfully.']);
+        }
     }
 
     public function closeModal(): void
@@ -102,36 +176,6 @@ class ContactIndex extends Component
         $this->showModal = true;
     }
 
-    public ?int $contactToDelete = null;
-
-    public function confirmDelete($contactId)
-    {
-        $this->contactToDelete = $contactId;
-        $this->dispatch(
-            'show-delete-confirmation',
-            action: 'delete-contact-confirmed',
-            title: 'Delete Contact?',
-            text: 'Are you sure you want to delete this contact?'
-        );
-    }
-
-    #[\Livewire\Attributes\On('delete-contact-confirmed')]
-    public function deleteContactConfirmed()
-    {
-        if ($this->contactToDelete) {
-            $contact = Auth::user()->contacts()->findOrFail($this->contactToDelete);
-            $contact->delete();
-            $this->contactToDelete = null;
-            $this->dispatch('notify', ['type' => 'success', 'message' => 'Contact deleted.']);
-        }
-    }
-
-    // Deprecated direct delete, kept just in case but view will use confirmDelete
-    public function delete($contactId)
-    {
-        $this->confirmDelete($contactId);
-    }
-
     public function updatedSearch()
     {
         $this->resetPage();
@@ -142,19 +186,21 @@ class ContactIndex extends Component
         $this->resetPage();
     }
 
-    // Grabber Properties
-    public bool $showGrabModal = false;
-    public int $grabStep = 1; // 1: Select Device & Mode, 2: Select Group (if applicable), 3: Processing
-    public string $grabMode = 'group'; // 'all' or 'group'
-    public ?int $selectedDeviceId = null;
-    public array $waGroups = [];
-    public ?string $selectedWaGroupId = null;
-    public ?int $targetLocalGroupId = null;
-    public bool $isGrabbing = false;
+    public function openModal()
+    {
+        $this->resetForm();
+        if ($this->filterGroup) {
+            $this->contact_group_id = $this->filterGroup;
+        }
+        $this->showModal = true;
+    }
 
     public function openGrabModal()
     {
         $this->resetGrabber();
+        if ($this->filterGroup) {
+            $this->targetLocalGroupId = $this->filterGroup;
+        }
         $this->showGrabModal = true;
     }
 
@@ -170,7 +216,7 @@ class ContactIndex extends Component
         $this->grabMode = 'group';
         $this->selectedDeviceId = null;
         $this->waGroups = [];
-        $this->selectedWaGroupId = null;
+        $this->selectedWaGroupIds = [];
         $this->targetLocalGroupId = null;
         $this->isGrabbing = false;
     }
@@ -181,22 +227,15 @@ class ContactIndex extends Component
         return Auth::user()->devices()->where('status', 'connected')->get();
     }
 
-    public function updatedSelectedDeviceId()
-    {
-        if ($this->selectedDeviceId && $this->grabMode === 'group') {
-            $this->fetchWaGroups();
-        }
-    }
-
-    public function updatedGrabMode()
-    {
-        if ($this->selectedDeviceId && $this->grabMode === 'group') {
-            $this->fetchWaGroups();
-        }
-    }
-
     public function fetchWaGroups()
     {
+        $this->validate([
+            'selectedDeviceId' => 'required'
+        ]);
+
+        $this->waGroups = [];
+        $this->selectedWaGroupIds = [];
+
         if (!$this->selectedDeviceId)
             return;
 
@@ -206,12 +245,12 @@ class ContactIndex extends Component
 
         try {
             $nodeUrl = config('services.whatsapp.url');
-            $response = \Illuminate\Support\Facades\Http::timeout(15)->get("{$nodeUrl}/sessions/{$device->token}/groups");
+            $response = Http::timeout(15)->get("{$nodeUrl}/sessions/{$device->token}/groups");
 
             if ($response->successful()) {
                 $this->waGroups = $response->json()['groups'] ?? [];
             } else {
-                $this->dispatch('notify', ['type' => 'error', 'message' => 'Failed to fetch groups from WhatsApp.']);
+                $this->dispatch('notify', ['type' => 'error', 'message' => 'Failed to fetch groups.']);
             }
         } catch (\Exception $e) {
             $this->dispatch('notify', ['type' => 'error', 'message' => 'Node service unreachable.']);
@@ -223,7 +262,7 @@ class ContactIndex extends Component
         $this->validate([
             'selectedDeviceId' => 'required',
             'targetLocalGroupId' => 'nullable|exists:contact_groups,id',
-            'selectedWaGroupId' => 'required_if:grabMode,group',
+            'selectedWaGroupIds' => 'required|array|min:1',
         ]);
 
         $this->isGrabbing = true;
@@ -231,60 +270,117 @@ class ContactIndex extends Component
         try {
             $device = Auth::user()->devices()->find($this->selectedDeviceId);
             $nodeUrl = config('services.whatsapp.url');
-            $contactsToSave = [];
+            $uniqueContacts = [];
 
-            if ($this->grabMode === 'group') {
-                // Fetch group participants
-                $response = \Illuminate\Support\Facades\Http::timeout(30)->get("{$nodeUrl}/sessions/{$device->token}/groups/{$this->selectedWaGroupId}");
+            if ($device) {
+                foreach ($this->selectedWaGroupIds as $waGroupId) {
+                    $response = Http::timeout(30)->get("{$nodeUrl}/sessions/{$device->token}/groups/{$waGroupId}");
+                    if ($response->successful()) {
+                        $data = $response->json();
+                        // dd($data); // DEBUG REMOVED
+                        $participants = $data['participants'] ?? ($data['metadata']['participants'] ?? []);
+                        foreach ($participants as $participant) {
+                            // Struct: ['id' => '...lid', 'phoneNumber' => '...@s.whatsapp.net', 'admin' => ... ]
+                            // We prefer 'phoneNumber' if available to get the actual WA number, not the LID.
+                            $jid = '';
+                            if (is_array($participant)) {
+                                $jid = $participant['phoneNumber'] ?? ($participant['id'] ?? '');
+                            } else {
+                                $jid = $participant;
+                            }
 
-                if ($response->successful()) {
-                    $metadata = $response->json()['metadata'] ?? [];
-                    $participants = $metadata['participants'] ?? [];
+                            $number = explode('@', $jid)[0];
+                            if (empty($number) || str_contains($jid, '-'))
+                                continue;
 
-                    foreach ($participants as $participant) {
-                        $jid = $participant['id'];
-                        // Skip if it's the sender himself
-                        if (str_contains($jid, $device->body))
-                            continue;
+                            // Determine Name (prioritize synced name/notify)
+                            $name = $number;
+                            if (is_array($participant)) {
+                                $name = $participant['name'] ?? ($participant['notify'] ?? $number);
+                            }
 
-                        $number = explode('@', $jid)[0];
-                        $contactsToSave[] = [
-                            'name' => 'WA User ' . $number, // Default name, maybe fetch deeper if needed
-                            'number' => $number,
-                        ];
+                            if (!isset($uniqueContacts[$number])) {
+                                $uniqueContacts[$number] = ['name' => $name, 'phone_number' => $number];
+                            }
+                        }
                     }
                 }
-            } else {
-                // Grab All logic (future implementation or if endpoint exists)
-                // For now, limited to Group Grabber as per immediate requirement availability
-            }
 
-            $count = 0;
-            foreach ($contactsToSave as $c) {
-                // Check if exists
-                if (!Auth::user()->contacts()->where('phone_number', $c['number'])->exists()) {
-                    Auth::user()->contacts()->create([
-                        'name' => $c['name'],
-                        'phone_number' => $c['number'],
-                        'contact_group_id' => $this->targetLocalGroupId,
-                    ]);
-                    $count++;
+                $count = 0;
+                foreach ($uniqueContacts as $contact) {
+                    // Check if contact exists IN THE TARGET GROUP specifically
+                    // allowing the same number to be in multiple groups
+                    $exists = Auth::user()->contacts()
+                        ->where('phone_number', $contact['phone_number'])
+                        ->where('contact_group_id', $this->targetLocalGroupId)
+                        ->exists();
+
+                    if (!$exists) {
+                        Auth::user()->contacts()->create([
+                            'name' => $contact['name'],
+                            'phone_number' => $contact['phone_number'],
+                            'contact_group_id' => $this->targetLocalGroupId,
+                        ]);
+                        $count++;
+                    }
                 }
+                $this->dispatch('notify', ['type' => 'success', 'message' => "Successfully grabbed {$count} contacts."]);
+                $this->closeGrabModal();
             }
-
-            $this->dispatch('notify', ['type' => 'success', 'message' => "Successfully grabbed {$count} new contacts."]);
-            $this->closeGrabModal();
-
         } catch (\Exception $e) {
-            $this->dispatch('notify', ['type' => 'error', 'message' => 'Error during grabbing: ' . $e->getMessage()]);
-        } finally {
-            $this->isGrabbing = false;
+            $this->dispatch('notify', ['type' => 'error', 'message' => 'Error: ' . $e->getMessage()]);
+        }
+        $this->isGrabbing = false;
+    }
+
+
+    // Create Group Logic
+    public bool $showGroupModal = false;
+    public string $newGroupName = '';
+
+    public function openCreateGroupModal()
+    {
+        $this->newGroupName = '';
+        $this->showGroupModal = true;
+    }
+
+    public function closeGroupModal()
+    {
+        $this->showGroupModal = false;
+        $this->newGroupName = '';
+    }
+
+    public function saveGroup()
+    {
+        $this->validate([
+            'newGroupName' => 'required|min:2|max:50|unique:contact_groups,name,NULL,id,user_id,' . Auth::id()
+        ]);
+
+        Auth::user()->contactGroups()->create([
+            'name' => $this->newGroupName
+        ]);
+
+        $this->dispatch('notify', ['type' => 'success', 'message' => 'Group created successfully!']);
+        $this->closeGroupModal();
+    }
+
+    public function updatedSelectAll($value)
+    {
+        if ($value) {
+            $this->selectedContacts = $this->getFilteredContactsQuery()->pluck('id')->map(fn($id) => (string) $id)->toArray();
+        } else {
+            $this->selectedContacts = [];
         }
     }
 
-    public function render()
+    public function deleteSelected()
     {
-        $query = Auth::user()->contacts()
+        $this->confirmBulkDelete();
+    }
+
+    private function getFilteredContactsQuery()
+    {
+        return Auth::user()->contacts()
             ->with('group')
             ->when($this->search, function ($q) {
                 $q->where(function ($q) {
@@ -296,10 +392,24 @@ class ContactIndex extends Component
             ->when($this->filterGroup, function ($q) {
                 $q->where('contact_group_id', $this->filterGroup);
             })
+            // If tab is 'uncategorized' and no specific group filter is set
+            ->when($this->activeTab === 'uncategorized' && !$this->filterGroup, function ($q) {
+                $q->whereNull('contact_group_id');
+            })
             ->latest();
+    }
+
+    public function render()
+    {
+        // Groups query
+        $groups = Auth::user()->contactGroups()
+            ->withCount('contacts')
+            ->orderBy('name')
+            ->get();
 
         return view('livewire.contacts.contact-index', [
-            'contacts' => $query->paginate(15),
+            'contacts' => $this->getFilteredContactsQuery()->paginate(15),
+            'groups' => $groups,
         ]);
     }
 }

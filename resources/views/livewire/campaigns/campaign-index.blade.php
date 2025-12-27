@@ -1,17 +1,14 @@
 <div class="space-y-6 animate-fade-in-up">
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-            <h2 class="text-2xl font-bold text-slate-800 dark:text-white">Campaigns</h2>
-            <p class="text-sm text-slate-500 dark:text-slate-400">Create and manage broadcast campaigns</p>
-        </div>
-        <button wire:click="openModal"
-            class="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium rounded-xl shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-all duration-200">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-slate-800 dark:text-white">Broadcast Campaigns</h1>
+        <a href="{{ route('campaigns.create') }}" wire:navigate
+            class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg flex items-center gap-2 transition-colors">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
             </svg>
-            New Campaign
-        </button>
+            New Broadcast
+        </a>
     </div>
 
     @if($this->devices->isEmpty())
@@ -33,13 +30,15 @@
     @endif
 
     <!-- Campaigns List -->
-    <div class="space-y-4">
+    <div class="space-y-4" wire:poll.3s>
         @forelse($campaigns as $campaign)
-            <div class="glass-card rounded-2xl p-5 hover:shadow-xl transition-all duration-300">
+            <div class="glass-card rounded-2xl p-5 hover:shadow-xl transition-all duration-300"
+                wire:key="campaign-{{ $campaign->id }}">
                 <div class="flex flex-col lg:flex-row lg:items-center gap-4">
                     <div class="flex-1">
                         <div class="flex items-center gap-3 mb-2">
-                            <h3 class="font-semibold text-slate-800 dark:text-white">{{ $campaign->name }}</h3>
+                            <a href="{{ route('campaigns.show', $campaign->id) }}" wire:navigate
+                                class="font-semibold text-slate-800 dark:text-white hover:text-emerald-500 transition-colors">{{ $campaign->name }}</a>
                             @if($campaign->status === 'running')
                                 <span
                                     class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400">
@@ -111,6 +110,10 @@
 
                     <!-- Actions -->
                     <div class="flex gap-2">
+                        <a href="{{ route('campaigns.show', $campaign->id) }}" wire:navigate
+                            class="px-3 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
+                            Monitor
+                        </a>
                         @if($campaign->status === 'draft')
                             <button wire:click="startCampaign({{ $campaign->id }})"
                                 wire:confirm="Start this campaign? Messages will be sent to all recipients."
@@ -127,22 +130,28 @@
                             </button>
                         @endif
                         @if($campaign->status === 'running')
-                            <button wire:click="pauseCampaign({{ $campaign->id }})"
-                                class="px-3 py-2 text-sm font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors">
-                                Pause
-                            </button>
+                            <div class="flex items-center gap-2">
+                                        <span class="px-3 py-2 text-sm font-medium text-sky-600 bg-sky-50 rounded-xl flex items-center gap-1 animate-pulse">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                            Sending...
+                                        </span>
+                                        <button wire:click="pauseCampaign({{ $campaign->id }})"
+                                            class="px-3 py-2 text-sm font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors">
+                                            Pause
+                                        </button>
+                                    </div>
                         @endif
-                        <button wire:click="confirmDelete({{ $campaign->id }})"
-                            class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-500 hover:text-rose-600">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
-                                </path>
-                            </svg>
-                        </button>
+                            <button wire:click="confirmDelete({{ $campaign->id }})"
+                                class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-500 hover:text-rose-600">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                    </path>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
         @empty
             <div class="glass-card rounded-2xl p-12 text-center">
                 <div
@@ -204,11 +213,35 @@
                             </div>
                         </div>
 
+                        <!-- Template Selector -->
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                Use Template
+                                <a href="{{ route('templates.index') }}"
+                                    class="text-emerald-500 hover:underline text-xs ml-2">Manage Templates</a>
+                            </label>
+                            <select wire:model.live="selectedTemplateId"
+                                class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="">-- Select a template (optional) --</option>
+                                @foreach($this->templates as $template)
+                                    <option value="{{ $template->id }}">
+                                        {{ $template->is_favorite ? '⭐ ' : '' }}{{ $template->name }}
+                                        @if($template->category) ({{ $template->category }}) @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
                         <div>
                             <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Message
                                 *</label>
-                            <textarea wire:model="message" rows="4" placeholder="Your broadcast message..."
+                            <textarea wire:model="message" rows="4"
+                                placeholder="Your broadcast message... Use [name], [phone] for personalization"
                                 class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white resize-none"></textarea>
+                            <p class="text-xs text-slate-500 mt-1">Variables: <code
+                                    class="bg-slate-100 dark:bg-slate-700 px-1 rounded">[name]</code>, <code
+                                    class="bg-slate-100 dark:bg-slate-700 px-1 rounded">[phone]</code>, <code
+                                    class="bg-slate-100 dark:bg-slate-700 px-1 rounded">[date]</code></p>
                             @error('message') <p class="mt-1 text-sm text-rose-500">{{ $message }}</p> @enderror
                         </div>
 
